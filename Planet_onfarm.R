@@ -140,7 +140,7 @@ order_list <- list()
 
 
 for (rn in 1:nrow(polygon.orders)) {
- 
+  
   code <- polygon.orders$code[rn]
   message('code: ',code)
   order <- polygon.orders$order[rn]
@@ -198,51 +198,97 @@ for (rn in 1:nrow(polygon.orders)) {
 }
 
 
+order_statuses <- GET(url='https://api.planet.com/compute/ops/orders/v2',
+                      
+                      authenticate(planet.api.key,
+                                   ''))
 
 
+order_stat <- GET(url='https://api.planet.com/compute/ops/stats/orders/v2',
+                  
+                  authenticate(planet.api.key,
+                               ''))
 
 
+X <- content(order_statuses)
+Y <- content(order_stat)
 
-
-
-### TBD
-
-order.id <-  content(order.pending)[['id']]
-
-order.status <- httr::GET(url='https://api.planet.com/compute/ops/orders/v2/7744bf3a-ca33-4cc0-b4ac-564a0f9275a5',
-                          authenticate(planet.api.key,
-                                       ''),
-                          content_type_json()
-)
-
-content(order.status)[['last_message']]
-
-# order.download <- httr::GET(url=content(order.status)[['_links']][['results']][[1]][['location']],
-#                           authenticate(planet.api.key,
-#                                        ''),
-#                           content_type_json()
-# )
-
-##executes download
-downloads <- purrr::imap(
-  content(order.status)[['_links']][['results']],
-  ~{
-    dest = file.path('C:\\PSA\\Remote Sensing Team\\Projects\\Planet Orders',
-                     basename(.x$name))
-    if(file.exists(dest)){
-      warning('File exists,skipping: ',basename(.x$name),
-              immediate. = T,
-              call. = F)
-      return(NULL)}
-    message(.y, ' ', basename(.x$name))
-    httr::GET(url=.x$location,
-              authenticate(planet.api.key,
-                           ''),
-              content_type_json(),
-              write_disk(dest)
+get_order_status <- function(orders){
+  purrr::map(
+    orders,
+    ~tibble(
+      link = .x[['_links']][['_self']],
+      id = .x$id,
+      last_message = .x$last_message,
+      name = .x$name
     )
-  },.progress=T
-)
+  ) %>% 
+    bind_rows()
+}
+
+
+get_all_orders <- function(){
+  order_statuses <- GET(url='https://api.planet.com/compute/ops/orders/v2',
+                        
+                        authenticate(planet.api.key,
+                                     ''))
+  order_response <- content(order_statuses)
+  orders <- data.frame()
+  if(length(order_response$orders)){
+    orders <- bind_rows(orders, get_order_status(order_response$orders))
+  }
+  while(!is.null(order_response[['_links']][['next']])){
+    message(order_response[['_links']][['next']])
+    order_statuses <- GET(url=order_response[['_links']][['next']],
+                          
+                          authenticate(planet.api.key,
+                                       ''))
+    order_response <- content(order_statuses)
+    
+    if(length(order_response$orders)){
+      orders <- bind_rows(orders, get_order_status(order_response$orders))
+    }
+  }
+  orders
+}
+
+
+od <- get_all_orders()
+
+to_be_downloaded <- od %>% filter(last_message=='Manifest delivery completed')
+
+for (rn in 1:nrow(to_be_downloaded)) {
+  products_request <- GET(url=to_be_downloaded$link[rn],
+                          authenticate(planet.api.key,
+                                       ''))
+  ##executes download
+  downloads <- purrr::imap(
+    content(products_request)[['_links']][['results']],
+    ~{
+      dir.create(file.path('D:\\Postdoc_work\\UMD\\API_query\\Planet\\Onfarm_planet_data',
+                 to_be_downloaded$name[rn]))
+      
+      dest = file.path('D:\\Postdoc_work\\UMD\\API_query\\Planet\\Onfarm_planet_data',
+                       to_be_downloaded$name[rn],
+                       basename(.x$name))
+      if(file.exists(dest)){
+        warning('File exists,skipping: ',basename(.x$name),
+                immediate. = T,
+                call. = F)
+        return(NULL)}
+      message(.y, ' ', basename(.x$name))
+      httr::GET(url=.x$location,
+                authenticate(planet.api.key,
+                             ''),
+                content_type_json(),
+                write_disk(dest)
+      )
+    },.progress=T
+  )
+}
+
+
+
 
 ##list all downloaded scenes
 scenes <- list.files('C:\\PSA\\Remote Sensing Team\\Projects\\Planet Orders',
