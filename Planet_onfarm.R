@@ -114,25 +114,28 @@ make.date.filter(polygon_bboxes$cover_planting[1],polygon_bboxes$cc_harvest_date
 # check order detail
 polygon.orders$order[1]
 
-
-
+# bad date sites
+bad_dates_sites <- polygon.orders %>% 
+  filter(cover_planting > cc_harvest_date|is.na(cover_planting)|is.na(cc_harvest_date)) %>% 
+  pull(code)
+polygon.orders <- polygon.orders %>% filter(!(code %in% bad_dates_sites))
 
 ##QUERYING####
-order_request <- purrr::map(
-  polygon.orders$order[1],
-  ~ POST(url='https://api.planet.com/data/v1/quick-search',
-         body = as.character(.x),
-         authenticate(planet.api.key,
-                      ''), 
-         content_type_json()
-  )
-)
-
-order_request_features <- purrr::map(
-  order_request,
-  ~content(.x)$features %>% 
-    purrr::map_chr('id')
-)
+# order_request <- purrr::map(
+#   polygon.orders$order[1],
+#   ~ POST(url='https://api.planet.com/data/v1/quick-search',
+#          body = as.character(.x),
+#          authenticate(planet.api.key,
+#                       ''), 
+#          content_type_json()
+#   )
+# )
+# 
+# order_request_features <- purrr::map(
+#   order_request,
+#   ~content(.x)$features %>% 
+#     purrr::map_chr('id')
+# )
 
 
 
@@ -193,7 +196,7 @@ for (rn in 1:nrow(polygon.orders)) {
                                       ''), 
                          content_type_json()
   )
-  order_list <- c(order_list, order_response)
+  order_list[[rn]] <- order_response
   
 }
 
@@ -257,6 +260,17 @@ od <- get_all_orders()
 
 to_be_downloaded <- od %>% filter(last_message=='Manifest delivery completed')
 
+polygon.orders %>% 
+  anti_join(to_be_downloaded %>% 
+              mutate(code = stringr::str_extract(name,'[A-Z]{3}'))) %>% 
+  select(-geomfilter,-datefilter, -order) %>% 
+  ungroup() %>% 
+  slice(1) %>%
+  mutate(area= st_area(geometry)) %>% 
+  ggplot()+geom_sf()
+
+
+
 for (rn in 1:nrow(to_be_downloaded)) {
   products_request <- GET(url=to_be_downloaded$link[rn],
                           authenticate(planet.api.key,
@@ -266,7 +280,7 @@ for (rn in 1:nrow(to_be_downloaded)) {
     content(products_request)[['_links']][['results']],
     ~{
       dir.create(file.path('D:\\Postdoc_work\\UMD\\API_query\\Planet\\Onfarm_planet_data',
-                 to_be_downloaded$name[rn]))
+                           to_be_downloaded$name[rn]))
       
       dest = file.path('D:\\Postdoc_work\\UMD\\API_query\\Planet\\Onfarm_planet_data',
                        to_be_downloaded$name[rn],
@@ -291,8 +305,14 @@ for (rn in 1:nrow(to_be_downloaded)) {
 
 
 ##list all downloaded scenes
-scenes <- list.files('C:\\PSA\\Remote Sensing Team\\Projects\\Planet Orders',
+scenes <- list.files('D:\\Postdoc_work\\UMD\\API_query\\Planet\\Onfarm_planet_data',
                      full.names = T)
+
+stringr::str_extract(scenes,'_[A-Z]{3}') %>% 
+  stringr::str_remove('_')
+
+bad_dates_sites
+
 
 ##reads in all EXIF metadata.
 scenes.exif <- exiftoolr::exif_read(scenes)
