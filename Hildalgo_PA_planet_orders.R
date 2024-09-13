@@ -78,10 +78,11 @@ search.results.c <- content(search.results) #results cap at 250, aim to get it l
 
 ##ORDERING####
 
+products <- c('analytic_8b_sr_udm2','analytic_sr_udm2') #8-band or 4-band
 products.json <- purrr::map_chr(search.results.c$features,
                                 'id') %>% 
   list(item_ids=.,item_type='PSScene',
-       product_bundle='analytic_8b_sr_udm2') %>%  #surface reflectance, 8 band. For 4-band or other products, visit https://developers.planet.com/apis/orders/product-bundles-reference/
+       product_bundle=products[1]) %>% #surface reflectance, 8 band. For 4-band or other products, visit https://developers.planet.com/apis/orders/product-bundles-reference/
   toJSON(auto_unbox = T,pretty = T)
 
 ##names your order, the date range will be generated accordingly
