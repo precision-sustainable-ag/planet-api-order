@@ -43,7 +43,7 @@ date.filter <- list(type='DateRangeFilter',field_name='acquired',
                     config = dates) %>% 
   jsonlite::toJSON(auto_unbox = T)
 
-##acceptable cloud cover range from 0-60%
+##acceptable cloud cover range from 0-60%; only "standard" images vs. "test"
 data.search.template <- '{
   "item_types":["PSScene"],
   "filter":{
@@ -58,7 +58,11 @@ data.search.template <- '{
                "lte":0.6
             },
             "field_name":"cloud_cover"
-         }
+         },
+{"type": "StringInFilter",
+        "field_name": "quality_category",
+        "config": ["standard"]
+      }
     ]
   }
 }'
